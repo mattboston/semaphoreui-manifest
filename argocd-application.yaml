@@ -1,0 +1,12 @@
+---
+project: platform
+source:
+  repoURL: https://github.com/mattboston/semaphoreui-manifest.git
+  path: charts
+  targetRevision: main
+destination:
+  server: https://kubernetes.default.svc
+  namespace: semaphoreui
+syncPolicy:
+  syncOptions:
+    - CreateNamespace=true

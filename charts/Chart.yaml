@@ -1,0 +1,13 @@
+---
+apiVersion: v2
+name: semaphoreui
+version: v0.1.0
+
+dependencies:
+  - name: semaphore
+    version: 16.0.2
+    repository: https://semaphoreui.github.io/charts
+
+  - name: cluster
+    version: 0.3.1
+    repository: https://cloudnative-pg.io/charts

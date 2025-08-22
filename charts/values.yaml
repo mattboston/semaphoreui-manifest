@@ -1,0 +1,103 @@
+---
+semaphore:
+  fullnameOverride: "semaphoreui"
+  replicaCount: 1
+  strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+  image:
+    repository: public.ecr.aws/semaphore/pro/server
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+    internalPort: 3000
+  ingress:
+    enabled: true
+    hosts:
+      - host: semaphoreui.mydomain.com
+        paths:
+          - path: /
+            pathType: Prefix
+    annotations:
+      kubernetes.io/tls-acme: "true"
+      cert-manager.io/cluster-issuer: letsencrypt
+    tls:
+      - hosts: ["semaphoreui.mydomain.com"]
+        secretName: semaphore-tls
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+  general:
+    useRemoteRunner: true
+  admin:
+    create: true
+  revisionHistoryLimit: 3
+  persistence:
+    enabled: true
+    # storageClass: ""
+    size: 100Gi
+  database:
+    type: postgres
+    port: 5432
+    host: "semaphoreui-postgresql-rw"
+    name: "semaphoreui"
+    existingSecret: semaphoreui-postgresql-app
+  postgresql:
+    enabled: true
+  valuesFrom:
+    - kind: secret
+      name: semaphoreui-oidc-creds
+      key: provider_url
+      target: oidc.providers.authentik.provider_url
+    - kind: secret
+      name: semaphoreui-oidc-creds
+      key: redirect_url
+      target: oidc.providers.authentik.redirect_url
+    - kind: secret
+      name: semaphoreui-oidc-creds
+      key: client_id
+      target: oidc.providers.authentik.client_id
+    - kind: secret
+      name: semaphoreui-oidc-creds
+      key: client_secret
+      target: oidc.providers.authentik.client_secret
+  oidc:
+    enable: true
+    providers:
+      authentik:
+        display_name: Sign in with Authentik
+        username_claim: preferred_username
+        name_claim: preferred_username
+        email_claim: email
+
+cluster:
+  fullnameOverride: "semaphoreui-postgresql"
+  cluster:
+    initdb:
+      database: semaphoreui
+    affinity:
+      enablePodAntiAffinity: true
+      topologyKey: kubernetes.io/hostname
+      podAntiAffinityType: preferred
+    resources:
+      limits:
+        cpu: 2
+        memory: 2Gi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    walStorage:
+      enabled: true
+    monitoring:
+      enabled: true
+      podMonitor:
+        enabled: true
+  backups:
+    enabled: false
+    s3:
+      bucket: platform-postgresql

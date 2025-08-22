@@ -1,0 +1,160 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semaphoreui-runner
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "semaphoreui.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=true
+    argocd.argoproj.io/sync-options: PrunePropagationPolicy=foreground
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "semaphoreui.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runner
+  template:
+    metadata:
+      labels:
+        {{- include "semaphoreui.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: runner
+    spec:
+      initContainers:
+        - name: wait-for-semaphore
+          image: curlimages/curl:latest
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              echo "Waiting for Semaphore UI to be ready..."
+              until curl -f http://semaphoreui:3000/api/ping; do
+                echo "Semaphore UI not ready yet, waiting..."
+                sleep 5
+              done
+              echo "Semaphore UI is ready!"
+        - name: runner-init
+          image: public.ecr.aws/semaphore/pro/runner:latest
+          command: ["/bin/bash"]
+          env:
+            - name: SEMAPHORE_RUNNER_PRIVATE_KEY_FILE
+              value: /var/lib/semaphore/runner.key
+            - name: SEMAPHORE_WEB_ROOT
+              value: http://semaphoreui:3000
+            - name: SEMAPHORE_RUNNER_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: semaphoreui-runner
+                  key: token
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "False"
+          args:
+            - -c
+            - |
+              mkdir -p /etc/semaphore /tmp/semaphore /var/lib/semaphore
+              apk add --no-cache jq
+              if [ ! -f /etc/semaphore/config.json ]; then
+              echo "Config file does not exist. Creating config file..."
+              cat > /etc/semaphore/config.json << EOF
+              {
+                "web_host": "$SEMAPHORE_WEB_ROOT",
+                "runner": {
+                  "registration_token": "$SEMAPHORE_RUNNER_REGISTRATION_TOKEN",
+                  "private_key_file": "/var/lib/semaphore/runner.key"
+                }
+              }
+              EOF
+              echo "Config file created."
+              fi
+              if ! jq -e '.runner.token' /etc/semaphore/config.json > /dev/null 2>&1; then
+                echo "Runner token is not set. Registering runner..."
+                echo $SEMAPHORE_RUNNER_REGISTRATION_TOKEN | semaphore runner register --stdin-registration-token --config /etc/semaphore/config.json
+              else
+                echo "Runner token is already set. Skipping registration..."
+              fi
+              echo "Setting up volume permissions for semaphore user..."
+              chown -R 1001:0 /var/lib/semaphore /etc/semaphore /tmp/semaphore
+              chmod -R 755 /var/lib/semaphore /etc/semaphore /tmp/semaphore
+              echo "Permissions setup complete!"
+          volumeMounts:
+            - name: semaphore-data
+              mountPath: /var/lib/semaphore
+            - name: semaphore-config
+              mountPath: /etc/semaphore
+            - name: semaphore-tmp
+              mountPath: /tmp/semaphore
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+      containers:
+        - name: semaphore-runner
+          image: public.ecr.aws/semaphore/pro/runner:latest
+          env:
+            - name: SEMAPHORE_RUNNER_PRIVATE_KEY_FILE
+              value: /var/lib/semaphore/runner.key
+            - name: SEMAPHORE_WEB_ROOT
+              value: http://semaphoreui:3000
+            - name: SEMAPHORE_RUNNER_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: semaphoreui-runner
+                  key: token
+            - name: ANSIBLE_HOST_KEY_CHECKING
+              value: "False"
+          command: ["/bin/bash"]
+          args:
+            - -c
+            - |
+              echo "Starting Semaphore runner..."
+              semaphore runner start --config /etc/semaphore/config.json
+              echo "Semaphore runner started!"
+          volumeMounts:
+            - name: semaphore-data
+              mountPath: /var/lib/semaphore
+            - name: semaphore-config
+              mountPath: /etc/semaphore
+            - name: semaphore-tmp
+              mountPath: /tmp/semaphore
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            runAsUser: 1001
+            runAsGroup: 0
+      volumes:
+        - name: semaphore-data
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 1Gi
+        - name: semaphore-config
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 1Gi
+        - name: semaphore-tmp
+          ephemeral:
+            volumeClaimTemplate:
+              spec:
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 5Gi

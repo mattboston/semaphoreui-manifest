@@ -1,0 +1,9 @@
+dependencies:
+- name: semaphore
+  repository: https://semaphoreui.github.io/charts
+  version: 16.0.2
+- name: cluster
+  repository: https://cloudnative-pg.io/charts
+  version: 0.3.1
+digest: sha256:def03b898ddb42f02cc3243960928e564fcaddf773b27ebf1765a2922ec12c5a
+generated: "2025-08-20T15:32:46.455236-04:00"
