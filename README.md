@@ -34,7 +34,6 @@ This manifest deploys a complete SemaphoreUI environment including:
 - cert-manager (for TLS certificates)
 - Storage class for persistent volumes
 - Authentik instance (for OIDC authentication)
-- Vault or OpenBAO for secrets management
 
 ## Components
 
