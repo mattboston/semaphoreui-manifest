@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semaphoreui-runner-requirements
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "semaphoreui.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runner
+data:
+  requirements.txt: |
+    {{- range .Values.runner.general.additionalPythonPackages }}
+    {{ . }}
+    {{- end }}

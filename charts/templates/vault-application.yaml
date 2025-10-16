@@ -1,0 +1,19 @@
+{{- with .Values.vault -}}
+{{- if .enabled }}
+---
+# yaml-language-server: $schema=https://gist.githubusercontent.com/sargunv/c2ca41a08391cd06feaad97aece309e4/raw/empty-json-schema.json
+apiVersion: platform.mydomain.com/v1alpha1
+kind: xVaultApplication
+metadata:
+  name: {{ $.Release.Name }}
+spec:
+  namespace: {{ $.Release.Namespace }}
+  authMethod: kubernetes
+  kubernetes:
+    cluster: {{ .cluster }}
+    serviceAccounts: {{ .serviceAccounts | toYaml | nindent 6 }}
+    tokenTTL: {{ .tokenTTL }}
+    tokenMaxTTL: {{ .tokenMaxTTL }}
+  policy: |{{ .policy | nindent 4 }}
+{{- end }}
+{{- end }}

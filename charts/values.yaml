@@ -34,6 +34,16 @@ semaphore:
       memory: 64Mi
   general:
     useRemoteRunner: true
+    additionalPythonPackages:
+      - fastapi==0.116.1
+      - httpx>=0.28.1
+      - hvac>=2.3.0
+      - jmespath>=1.0.1
+      - netaddr>=1.3.0
+      - prometheus-client>=0.22.0
+      - requests>=2.32.3
+      - structlog>=25.3.0
+      - types-requests>=2.32.0.20241016
   admin:
     create: true
   revisionHistoryLimit: 3
@@ -48,36 +58,64 @@ semaphore:
     name: "semaphoreui"
     existingSecret: semaphoreui-postgresql-app
   postgresql:
-    enabled: true
-  valuesFrom:
-    - kind: secret
-      name: semaphoreui-oidc-creds
-      key: provider_url
-      target: oidc.providers.authentik.provider_url
-    - kind: secret
-      name: semaphoreui-oidc-creds
-      key: redirect_url
-      target: oidc.providers.authentik.redirect_url
-    - kind: secret
-      name: semaphoreui-oidc-creds
-      key: client_id
-      target: oidc.providers.authentik.client_id
-    - kind: secret
-      name: semaphoreui-oidc-creds
-      key: client_secret
-      target: oidc.providers.authentik.client_secret
+    enabled: false
+  extraEnvVariables:
+    SEMAPHORE_WEB_ROOT: "/"
+  extraVolumes:
+    - name: semaphoreui-oidc
+      secret:
+        secretName: semaphoreui-authentik-oidc
+  extraVolumeMounts:
+    - name: semaphoreui-oidc
+      mountPath: /etc/semaphore/oidc
+      readOnly: true
   oidc:
     enable: true
     providers:
       authentik:
         display_name: Sign in with Authentik
+        redirect_url: https://semaphoreui.mydomain.com/api/auth/oidc/authentik/redirect
+        provider_url: https://auth.mydomain.com/application/o/semaphoreui/
         username_claim: preferred_username
         name_claim: preferred_username
         email_claim: email
+        client_id_file: /etc/semaphore/oidc/client_id
+        client_secret_file: /etc/semaphore/oidc/client_secret
+        scopes:
+          - openid
+          - profile
+          - email
+
+runner:
+  image:
+    repository: public.ecr.aws/semaphore/pro/runner
+    tag: "latest"
+  replicas: 3
+  storage:
+    storageClass: ceph-block
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  general:
+    additionalPythonPackages:
+      - fastapi==0.116.1
+      - httpx>=0.28.1
+      - hvac>=2.3.0
+      - jmespath>=1.0.1
+      - netaddr>=1.3.0
+      - prometheus-client>=0.22.0
+      - requests>=2.32.3
+      - structlog>=25.3.0
+      - types-requests>=2.32.0.20241016
 
 cluster:
   fullnameOverride: "semaphoreui-postgresql"
   cluster:
+    instances: 3
     initdb:
       database: semaphoreui
     affinity:
@@ -91,13 +129,54 @@ cluster:
       requests:
         cpu: 250m
         memory: 256Mi
+    storage:
+      storageClass: ceph-block
     walStorage:
       enabled: true
+      storageClass: ceph-block
     monitoring:
       enabled: true
       podMonitor:
         enabled: true
-  backups:
-    enabled: false
-    s3:
-      bucket: platform-postgresql
+    backups:
+      enabled: false
+
+authentik:
+  enabled: true
+  name: SemaphoreUI
+  description: Ansible UI and job runner
+  iconURL: https://icon.icepanel.io/Technology/svg/Ansible.svg
+  publisher: Semaphore Project
+  launchURL: https://semaphoreui.mydomain.com
+  accessGroups:
+    - Engineering
+  oidc:
+    clientType: confidential
+    clientID: semaphoreui
+    redirectURIs:
+      - url: https://semaphoreui.mydomain.com/api/auth/oidc/authentik/redirect
+        matchingMode: strict
+  secretName: semaphoreui-authentik-oidc
+  secretRefreshInterval: 5m
+  serviceAccountName: semaphoreui-external-secrets
+  # applicationGroups:
+  #   - name: "SemaphoreUI Admins"
+  #     roles: ["Admin"]
+  # roles:
+  #   - name: "Admin"
+  #     description: "Full SemaphoreUI administrative access"
+
+vault:
+  enabled: true
+  cluster: platform
+  serviceAccounts:
+    - "semaphoreui-external-secrets"
+  tokenTTL: 3600
+  tokenMaxTTL: 86400
+  policy: |
+    path "kv/+/semaphoreui/*" {
+      capabilities = ["create", "read", "update", "delete"]
+    }
+    path "+/kv/+/semaphoreui/*" {
+      capabilities = ["create", "read", "update", "delete"]
+    }

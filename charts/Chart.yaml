@@ -1,11 +1,11 @@
 ---
 apiVersion: v2
 name: semaphoreui
-version: v0.1.0
+version: v0.2.0
 
 dependencies:
   - name: semaphore
-    version: 16.0.2
+    version: 16.0.4
     repository: https://semaphoreui.github.io/charts
 
   - name: cluster

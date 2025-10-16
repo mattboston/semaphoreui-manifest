@@ -11,7 +11,7 @@ metadata:
     argocd.argoproj.io/sync-options: Prune=true
     argocd.argoproj.io/sync-options: PrunePropagationPolicy=foreground
 spec:
-  replicas: 3
+  replicas: {{ .Values.runner.replicas }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -42,7 +42,7 @@ spec:
               done
               echo "Semaphore UI is ready!"
         - name: runner-init
-          image: public.ecr.aws/semaphore/pro/runner:latest
+          image: {{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}
           command: ["/bin/bash"]
           env:
             - name: SEMAPHORE_RUNNER_PRIVATE_KEY_FILE
@@ -96,12 +96,14 @@ spec:
             runAsGroup: 0
       containers:
         - name: semaphore-runner
-          image: public.ecr.aws/semaphore/pro/runner:latest
+          image: {{ .Values.runner.image.repository }}:{{ .Values.runner.image.tag }}
           env:
             - name: SEMAPHORE_RUNNER_PRIVATE_KEY_FILE
               value: /var/lib/semaphore/runner.key
             - name: SEMAPHORE_WEB_ROOT
               value: http://semaphoreui:3000
+            - name: SEMAPHORE_CONFIG_PATH
+              value: /etc/semaphore
             - name: SEMAPHORE_RUNNER_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -114,6 +116,7 @@ spec:
             - -c
             - |
               echo "Starting Semaphore runner..."
+              pip3 install --upgrade -r ${SEMAPHORE_CONFIG_PATH}/requirements.txt
               semaphore runner start --config /etc/semaphore/config.json
               echo "Semaphore runner started!"
           volumeMounts:
@@ -123,13 +126,16 @@ spec:
               mountPath: /etc/semaphore
             - name: semaphore-tmp
               mountPath: /tmp/semaphore
+            - name: requirements
+              mountPath: /etc/semaphore/requirements.txt
+              subPath: requirements.txt
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: {{ .Values.runner.resources.requests.cpu }}
+              memory: {{ .Values.runner.resources.requests.memory }}
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: {{ .Values.runner.resources.limits.cpu }}
+              memory: {{ .Values.runner.resources.limits.memory }}
           securityContext:
             runAsUser: 1001
             runAsGroup: 0
@@ -142,6 +148,7 @@ spec:
                 resources:
                   requests:
                     storage: 1Gi
+                storageClassName: {{ .Values.runner.storage.storageClass }}
         - name: semaphore-config
           ephemeral:
             volumeClaimTemplate:
@@ -150,6 +157,7 @@ spec:
                 resources:
                   requests:
                     storage: 1Gi
+                storageClassName: {{ .Values.runner.storage.storageClass }}
         - name: semaphore-tmp
           ephemeral:
             volumeClaimTemplate:
@@ -158,3 +166,7 @@ spec:
                 resources:
                   requests:
                     storage: 5Gi
+                storageClassName: {{ .Values.runner.storage.storageClass }}
+        - name: requirements
+          configMap:
+            name: semaphoreui-runner-requirements

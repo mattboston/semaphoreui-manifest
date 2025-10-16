@@ -1,0 +1,32 @@
+---
+# yaml-language-server: $schema=https://gist.githubusercontent.com/sargunv/c2ca41a08391cd06feaad97aece309e4/raw/empty-json-schema.json
+apiVersion: platform.mydomain.com/v1alpha1
+kind: xAuthentikApplication
+metadata:
+  name: {{ .Release.Name }}
+  annotations:
+    # Make sure this runs before semaphore (so the secret exists for AVP lookups)
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  name: {{ .Values.authentik.name }}
+  description: {{ .Values.authentik.description }}
+  iconURL: {{ .Values.authentik.iconURL }}
+  publisher: {{ .Values.authentik.publisher }}
+  launchURL: {{ .Values.authentik.launchURL }}
+  providerType: oidc
+  oidc:
+    clientType: {{ .Values.authentik.oidc.clientType }}
+    clientID: {{ .Values.authentik.oidc.clientID }}
+    redirectURIs: {{ .Values.authentik.oidc.redirectURIs | toYaml | nindent 6 }}
+  secret:
+    name: {{ .Values.authentik.secretName }}
+    namespace: {{ .Release.Namespace }}
+  accessGroups: {{ .Values.authentik.accessGroups | toYaml | nindent 4 }}
+  commonLabels:
+    app.kubernetes.io/name: {{ .Release.Name }}-authentik-application
+    app.kubernetes.io/component: authentik-application
+    app.kubernetes.io/part-of: {{ .Release.Name }}
+
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/datreeio/CRDs-catalog/refs/heads/main/external-secrets.io/secretstore_v1.json
+# ExternalSecret and SecretStore removed: AVP reads Kubernetes Secret directly
